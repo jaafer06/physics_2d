@@ -1,56 +1,101 @@
 #include <iostream>
 #include <string>
-#define OLC_PGE_APPLICATION
-#include "olcPixelGameEngine.h"
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
 #include <physics.h>
-constexpr float pi = 3.14159265358979323846;
+#include "utils/imgui.h"
 
 
-class Example : public olc::PixelGameEngine {
-public:
-	void draw(const Rect& rect) {
-		const auto [p0, p1, p2, p3] = rect.getPoints();
-		DrawLine(p0[0], -p0[1], p1[0], -p1[1], olc::BLUE);
-		DrawLine(p1[0], -p1[1], p2[0], -p2[1], olc::BLUE);
-		DrawLine(p2[0], -p2[1], p3[0], -p3[1], olc::BLUE);
-		DrawLine(p3[0], -p3[1], p0[0], -p0[1], olc::BLUE);
+static void draw(utils::ImguiCanvas& canvas, const Rect& rect) {
+	auto [p0, p1, p2, p3] = rect.getPoints();
+    canvas.drawRectangle(p0, p1, p2, p3);
+}
+
+static void draw(utils::ImguiCanvas& canvas, const Eigen::Vector2f& start, const Eigen::Vector2f& end) {
+    canvas.drawLine(start, end);
+}
+
+static void draw(utils::ImguiCanvas& canvas, const Eigen::Vector2f& p) {
+    canvas.drawPoint(p);
+}
+
+void draw(utils::ImguiCanvas& canvas, Rect::IntersectionResult& r) {
+	for (const auto& p : r.contactPoints) {
+		draw(canvas, p);
 	}
-
-	Example()
-	{
-		sAppName = "Example";
+	if (r.contactPoints.size() > 0) {
+		draw(canvas, r.contactPoints[0], r.contactPoints[0] + 50*r.normal);
 	}
+	std::cout << r.contactPoints.size() << " " << r.depth << std::endl;
 
-public:
-	bool OnUserCreate() override
-	{
-		// Called once at the start, so create things here
-		return true;
-	}
-
-	bool OnUserUpdate(float fElapsedTime) override
-	{
-		Clear(olc::BLACK);
-		float mx = float(GetMouseX());
-		float my = -float(GetMouseY());
-		Rect r = Rect{ mx, my, 50, 50 };
-		Rect r2 = Rect{ 100, -100, 100, 100 };
-
-
-		draw(r);
-		draw(r2);
-		r2.hm(r);
-		return true;
-	}
 };
 
+static void intializeSimulation(std::vector<Rect*>& rectangles) {
+    rectangles.push_back(new Rect{ 100, 500 , 100, 100 });
+    rectangles.push_back(new Rect{ 100, 100, 100, 100 });
+    //rectangles[0]->rotate(pi / 8);
+}
+
+static void simulationLoop(std::vector<Rect*>& rectangles, utils::ImguiCanvas& canvas) {
+    rectangles[0]->translate({ 0, -5 });
+    CollisionResolver collisionResolver;
+    
+    for (unsigned i = 0; i < rectangles.size(); ++i) {
+        for (unsigned j = i+1; j < rectangles.size(); ++j) {
+            const auto result = rectangles[i]->intersects(*rectangles[j]);
+            collisionResolver.resolveInterPenetration(*rectangles[i], *rectangles[j], result);
+            //apply da physics mr white
+        }
+    }
+
+    for (const auto& r : rectangles) {
+        draw(canvas, *r);
+    }
+}
 
 int main()
 {
-	Example demo;
-	if (demo.Construct(1080, 780, 1, 1))
-		demo.Start();
+    constexpr unsigned int width = 1280;
+    constexpr unsigned int height = 780;
+    GLFWwindow* window;
+
+    if (!glfwInit()) {
+        return -1;
+    }
+
+    window = glfwCreateWindow(width, height, "Hello World", NULL, NULL);
+    if (!window) {
+        glfwTerminate();
+        return -1;
+    }
+    glfwMakeContextCurrent(window);
+    utils::ImGuiWrapper imguiWrapper(window, "#version 130");
+    glfwWindowHint(GLFW_SAMPLES, 4); // 4x antialiasing
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3); // We want OpenGL 3.3
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // To make MacOS happy; should not be needed
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // We don't want the old OpenGL 
+    glfwSwapInterval(1);
+
+    gladLoadGL();
+    glViewport(0, 0, width, height);
+    auto& canvas = imguiWrapper.createCanvas(600, 600);
+    std::vector<Rect*> rectangles;
+    intializeSimulation(rectangles);
+    while (!glfwWindowShouldClose(window)) {
+        Rect rect{ 100, 100, 100, 100 };
+        auto [p0, p1, p2, p3] = rect.getPoints();
+        const auto callback = [&rectangles](auto& canvas) { simulationLoop(rectangles, canvas); };
+        canvas.drawCallback = callback;
+        imguiWrapper.render();
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
+
+    glfwTerminate();
 
 	return 0;
 }
+
 

@@ -1,2 +1,0 @@
-add_library(olcPixelGameEngine INTERFACE)
-target_include_directories(olcPixelGameEngine INTERFACE .)
