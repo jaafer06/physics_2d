@@ -1,11 +1,21 @@
 #include <iostream>
 #include <string>
-#include <physics.h>
 #define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"
+#include <physics.h>
+constexpr float pi = 3.14159265358979323846;
+
 
 class Example : public olc::PixelGameEngine {
 public:
+	void draw(const Rect& rect) {
+		const auto [p0, p1, p2, p3] = rect.getPoints();
+		DrawLine(p0[0], -p0[1], p1[0], -p1[1], olc::BLUE);
+		DrawLine(p1[0], -p1[1], p2[0], -p2[1], olc::BLUE);
+		DrawLine(p2[0], -p2[1], p3[0], -p3[1], olc::BLUE);
+		DrawLine(p3[0], -p3[1], p0[0], -p0[1], olc::BLUE);
+	}
+
 	Example()
 	{
 		sAppName = "Example";
@@ -22,22 +32,14 @@ public:
 	{
 		Clear(olc::BLACK);
 		float mx = float(GetMouseX());
-		float my = float(GetMouseY());
-		Rect r = Rect{ 100, 100, 100, 100 };
-		Rect r2 = Rect{ mx - 25, my - 25, 50, 50 };
-		FillRect(mx-25, my-25, 50, 50, olc::BLUE);
-		auto result = r.intersectionTest(r2);
-		if (result.intersects) {
-			FillRect(100, 100, 100, 100, olc::BLUE);
-			float x1 = result.intersectionPoint[0];
-			float y1 = result.intersectionPoint[1];
-			float x2 = result.intersectionPoint[0] + result.normal[0]*50;
-			float y2 = result.intersectionPoint[1] + result.normal[1]*50;
-			DrawLine(x1, y1, x2, y2);
-		} else {
-			FillRect(100, 100, 100, 100, olc::RED);
-		}
-		
+		float my = -float(GetMouseY());
+		Rect r = Rect{ mx, my, 50, 50 };
+		Rect r2 = Rect{ 100, -100, 100, 100 };
+
+
+		draw(r);
+		draw(r2);
+		r2.hm(r);
 		return true;
 	}
 };
