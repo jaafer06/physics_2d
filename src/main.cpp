@@ -19,8 +19,8 @@ void draw(utils::ImguiCanvas& canvas, const Rect::IntersectionResult& r) {
 
 static void intializeSimulation(std::vector<Rect*>& rectangles) {
     rectangles.push_back(new Rect{ 100, 500 , 100, 100 });
-    rectangles.push_back(new Rect{ 100, 100, 100, 100 });
-    //rectangles[0]->rotate(pi / 8);
+    rectangles.push_back(new Rect{ 300, 100, 500, 100 });
+    rectangles[0]->rotate(pi);
 }
 
 static void simulationLoop(std::vector<Rect*>& rectangles, utils::ImguiCanvas& canvas) {
@@ -29,8 +29,8 @@ static void simulationLoop(std::vector<Rect*>& rectangles, utils::ImguiCanvas& c
     
     for (unsigned i = 0; i < rectangles.size(); ++i) {
         for (unsigned j = i+1; j < rectangles.size(); ++j) {
-            const auto result = rectangles[i]->intersects(*rectangles[j]);
-            collisionResolver.resolveInterPenetration(*rectangles[j], *rectangles[i], result);
+            const auto result = rectangles[j]->intersects(*rectangles[i]);
+            //collisionResolver.resolveInterPenetration(*rectangles[j], *rectangles[i], result);
             draw(canvas, result);
             //apply da physics mr white
         }

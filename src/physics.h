@@ -33,15 +33,7 @@ struct Edge {
 		const auto v = p - start;
 		return (v.dot(direction) / direction.dot(direction)) * direction + start;
 	}
-	//bool isOverlayed(const Edge& other) const {
-	//	return (get_a_b_LineCoeff() - other.get_a_b_LineCoeff()).cwiseAbs().maxCoeff() < 0.01;
-	//}
 
-	//inline Eigen::Vector2f get_a_b_LineCoeff() const {
-	//	const float a = (p2[1] - p1[1]) / (p2[0] - p1[0]);
-	//	const float b = p1[1] - a * p1[0];
-	//	return { a, b };
-	//}
 };
 
 
@@ -120,15 +112,13 @@ public:
 			});
 			const auto normal = v[indices[0]].normalized();
 			const float depth = v[indices[0]].norm();
-			const std::vector<Eigen::Vector2f> contactPoints = points;
-			return { contactPoints, normal, depth, IntersectionType::EdgeEdge, true };
+			return { points, normal, depth, IntersectionType::EdgeEdge, true };
 
 		} else if (points.size() == 2) {
 			const auto direction = points[0] - points[1];
 			const Eigen::Vector2f normal = R * direction.normalized();
 			const auto depth = 0;
-			const std::vector<Eigen::Vector2f> contactPoints = points;
-			return { contactPoints, normal, depth, IntersectionType::EdgeEdge, true };
+			return { points, normal, depth, IntersectionType::EdgeEdge, true };
 		} else if (points.size() == 0) {
 			return { {}, {}, 0, IntersectionType::EdgeEdge, false };
 		}
@@ -143,19 +133,6 @@ public:
 		const auto b = point - pts[0];
 		const auto result = A.colPivHouseholderQr().solve(b);
 		return result.maxCoeff() <= 1 && result.minCoeff() >= 0;
-	};
-
-
-	std::tuple<unsigned,Edge::IntersectionResult> edgeIntersection(const Edge& otherEdge) const {
-		const auto edges = getEdges();
-		for (unsigned edgeIndex = 0; edgeIndex < 4; ++edgeIndex) {
-			const auto edge = edges[edgeIndex];
-			const auto result = edge.intersects(otherEdge);
-			if (result.intersects) {
-				return std::tuple{ edgeIndex, result };
-			}
-		};
-		return std::tuple{ 0, Edge::IntersectionResult{ 0, {}, false } };
 	};
 
 	std::array<Eigen::Vector2f, 4> getPoints() const {
@@ -178,44 +155,6 @@ public:
 		return { e0, e1, e2, e3 };
 	};
 
-	void rotate(float _angle) {
-		angle = _angle;
-	}
-
-	void addRotation(float deltaAngle) {
-		angle += deltaAngle;
-	}
-
-	std::array<Edge, 2> vertexIndexToEdge(const unsigned index) const {
-		auto const pts = getPoints();
-		if (index == 0) {
-			const Edge v1{ pts[index],pts[1] - pts[index] };
-			const Edge v2{ pts[index], pts[3] - pts[index] };
-			return { v1, v2 };
-		}
-		else if (index == 1) {
-			const Edge v1{ pts[index], pts[0] - pts[index] };
-			const Edge v2{ pts[index], pts[2] - pts[index] };
-			return { v1, v2 };
-		}
-		else if (index == 2) {
-			const Edge v1{ pts[index], pts[3] - pts[index] };
-			const Edge v2{ pts[index], pts[1] - pts[index] };
-			return { v1, v2 };
-		}
-		else if (index == 3) {
-			const Edge v1{ pts[index], pts[2] - pts[index] };
-			const Edge v2{ pts[index], pts[0] - pts[index] };
-			return { v1, v2 };
-		}
-		throw "index > 3";
-	};
-
-	Eigen::Vector2f getCenterOfMass() const {
-		const auto points = getPoints();
-		return  Eigen::Map<const Eigen::Matrix<float, 4, 2, Eigen::RowMajor>>((float*)points.data()).colwise().sum() * 0.25;
-	};
-
 	void translate(Eigen::Vector2f t) {
 		position = position + t;
 	};
@@ -223,24 +162,33 @@ public:
 	void setPosition(const Eigen::Vector2f& _pos) {
 		position = _pos;
 	}
+	const Eigen::Vector2f& getPosition() const {
+		return position;
+	}
+
+	void rotate(float _angle) {
+		angle = _angle;
+	}
+	void addRotation(float deltaAngle) {
+		angle += deltaAngle;
+	}
+	Eigen::Vector2f getParticuleVelocity(const Eigen::Vector2f& p) {
+		if (!contains(p)) {
+			throw "where is the point my dude";
+		};
+		const Eigen::Matrix2f A{ {0, -angularVelocity}, {angularVelocity, 0} };
+		const auto vAngle = A * (p - rotationCenter);
+		return vAngle + linearVelocity;
+	}
 
 private:
-	inline static Eigen::Vector2f vertexIndexToNormal[4][4] {
-		{Eigen::Vector2f{0, 0}, Eigen::Vector2f{0, 1}, Eigen::Vector2f{0, 0}, Eigen::Vector2f{-1, 0}},
-		{Eigen::Vector2f{0, 1}, Eigen::Vector2f{0, 0}, Eigen::Vector2f{1, 0}, Eigen::Vector2f{0, 0}},
-		{Eigen::Vector2f{0, 0}, Eigen::Vector2f{0, 1}, Eigen::Vector2f{0, -1}, Eigen::Vector2f{0, 0}},
-		{Eigen::Vector2f{-1, 0}, Eigen::Vector2f{0, 0}, Eigen::Vector2f{-1, 0}, Eigen::Vector2f{0, 0}},
-	};
-
-	inline static Eigen::Vector2f edgeIndexToNormal[4] {
-		Eigen::Vector2f{0, 1}, Eigen::Vector2f{1, 0}, Eigen::Vector2f{0, -1}, Eigen::Vector2f{-1, 0}
-	};
-
-
+	float mass{ 1 };
 	Eigen::Vector2f position;
 	Eigen::Vector2f size;
+	Eigen::Vector2f linearVelocity;
+	Eigen::Vector2f rotationCenter;
 	float angle;
-
+	float angularVelocity;
 };
 
 
@@ -257,7 +205,7 @@ private:
 
 	std::tuple<Eigen::Vector2f, Eigen::Vector2f> getNormal(const Rect& rect1, const Rect& rect2, const Rect::IntersectionResult& result) {
 		const auto normal = result.normal;
-		if ((rect1.getCenterOfMass() - result.contactPoints[0]).dot(normal) > 0) {
+		if ((rect1.getPosition() - result.contactPoints[0]).dot(normal) > 0) {
 			return { normal, -normal };
 		};
 		return { -normal, normal };
