@@ -6,25 +6,12 @@
 #include "utils/imgui.h"
 
 
-static void draw(utils::ImguiCanvas& canvas, const Rect& rect) {
-	auto [p0, p1, p2, p3] = rect.getPoints();
-    canvas.drawRectangle(p0, p1, p2, p3);
-}
-
-static void draw(utils::ImguiCanvas& canvas, const Eigen::Vector2f& start, const Eigen::Vector2f& end) {
-    canvas.drawLine(start, end);
-}
-
-static void draw(utils::ImguiCanvas& canvas, const Eigen::Vector2f& p) {
-    canvas.drawPoint(p);
-}
-
-void draw(utils::ImguiCanvas& canvas, Rect::IntersectionResult& r) {
+void draw(utils::ImguiCanvas& canvas, const Rect::IntersectionResult& r) {
 	for (const auto& p : r.contactPoints) {
-		draw(canvas, p);
+		canvas.drawPoint(p);
 	}
 	if (r.contactPoints.size() > 0) {
-		draw(canvas, r.contactPoints[0], r.contactPoints[0] + 50*r.normal);
+        canvas.drawLine({ r.contactPoints[0], r.contactPoints[0] + 50 * r.normal });
 	}
 	std::cout << r.contactPoints.size() << " " << r.depth << std::endl;
 
@@ -37,19 +24,20 @@ static void intializeSimulation(std::vector<Rect*>& rectangles) {
 }
 
 static void simulationLoop(std::vector<Rect*>& rectangles, utils::ImguiCanvas& canvas) {
-    rectangles[0]->translate({ 0, -5 });
+    rectangles[0]->setPosition(canvas.mousePos);
     CollisionResolver collisionResolver;
     
     for (unsigned i = 0; i < rectangles.size(); ++i) {
         for (unsigned j = i+1; j < rectangles.size(); ++j) {
             const auto result = rectangles[i]->intersects(*rectangles[j]);
-            collisionResolver.resolveInterPenetration(*rectangles[i], *rectangles[j], result);
+            collisionResolver.resolveInterPenetration(*rectangles[j], *rectangles[i], result);
+            draw(canvas, result);
             //apply da physics mr white
         }
     }
 
-    for (const auto& r : rectangles) {
-        draw(canvas, *r);
+    for (const auto r : rectangles) {
+        canvas.drawRectangle(r->getPoints());
     }
 }
 
@@ -83,7 +71,7 @@ int main()
     std::vector<Rect*> rectangles;
     intializeSimulation(rectangles);
     while (!glfwWindowShouldClose(window)) {
-        Rect rect{ 100, 100, 100, 100 };
+        Rect rect{ 100, 100, 500, 100 };
         auto [p0, p1, p2, p3] = rect.getPoints();
         const auto callback = [&rectangles](auto& canvas) { simulationLoop(rectangles, canvas); };
         canvas.drawCallback = callback;

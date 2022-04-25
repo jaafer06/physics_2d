@@ -220,6 +220,10 @@ public:
 		position = position + t;
 	};
 
+	void setPosition(const Eigen::Vector2f& _pos) {
+		position = _pos;
+	}
+
 private:
 	inline static Eigen::Vector2f vertexIndexToNormal[4][4] {
 		{Eigen::Vector2f{0, 0}, Eigen::Vector2f{0, 1}, Eigen::Vector2f{0, 0}, Eigen::Vector2f{-1, 0}},
