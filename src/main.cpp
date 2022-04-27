@@ -6,39 +6,56 @@
 #include "utils/imgui.h"
 
 
+void draw(const std::vector<Rect*> rectangles, utils::ImguiCanvas& canvas) {
+    for (const auto r : rectangles) {
+        canvas.drawRectangle(r->getPoints());
+        const auto p = r->getPoints()[0];
+        const auto v = r->getParticuleVelocity(p);
+        //canvas.drawLine({p, v+p});
+    }
+}
 void draw(utils::ImguiCanvas& canvas, const Rect::IntersectionResult& r) {
 	for (const auto& p : r.contactPoints) {
 		canvas.drawPoint(p);
 	}
-	if (r.contactPoints.size() > 0) {
-        canvas.drawLine({ r.contactPoints[0], r.contactPoints[0] + 50 * r.normal });
-	}
-	std::cout << r.contactPoints.size() << " " << r.depth << std::endl;
+	//if (r.contactPoints.size() > 0) {
+ //       canvas.drawLine({ r.contactPoints[0], r.contactPoints[0] + 50 * r.normal });
+	//}
+	//std::cout << r.contactPoints.size() << " " << r.depth << std::endl;
 
 };
 
 static void intializeSimulation(std::vector<Rect*>& rectangles) {
     rectangles.push_back(new Rect{ 100, 500 , 100, 100 });
     rectangles.push_back(new Rect{ 300, 100, 500, 100 });
-    rectangles[0]->rotate(pi);
+    rectangles[0]->rotate(pi/6);
+    //rectangles[0]->setAngularVelocity(pi);
+    rectangles[0]->setLinearVelocity({ 0, -150 });
+    rectangles[1]->mass = 10;
+
 }
 
 static void simulationLoop(std::vector<Rect*>& rectangles, utils::ImguiCanvas& canvas) {
-    rectangles[0]->setPosition(canvas.mousePos);
+    const float deltaTime = ImGui::GetIO().DeltaTime;
+    //rectangles[0]->setPosition(canvas.mousePos);
     CollisionResolver collisionResolver;
-    
     for (unsigned i = 0; i < rectangles.size(); ++i) {
         for (unsigned j = i+1; j < rectangles.size(); ++j) {
             const auto result = rectangles[j]->intersects(*rectangles[i]);
-            //collisionResolver.resolveInterPenetration(*rectangles[j], *rectangles[i], result);
-            draw(canvas, result);
+            //draw(canvas, result);
             //apply da physics mr white
+            if (result.intersects) {
+                collisionResolver.resolveInterPenetration(*rectangles[j], *rectangles[i], result);
+                collisionResolver.resolveMovement(*rectangles[j], *rectangles[i], result);
+                //collisionResolver.resolveInterPenetration(*rectangles[j], *rectangles[i], result);
+            }
+
         }
     }
+    rectangles[0]->addLinearVelocity({ 0, -9 });
 
-    for (const auto r : rectangles) {
-        canvas.drawRectangle(r->getPoints());
-    }
+    update(rectangles, deltaTime);
+    draw(rectangles, canvas);
 }
 
 int main()

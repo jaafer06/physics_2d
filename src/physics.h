@@ -7,6 +7,7 @@
 #include <vector>
 #include <set>
 constexpr float pi = 3.14159265358979323846;
+static const Eigen::Rotation2Df R_90{ pi / 2 };
 
 struct Edge {
 	Eigen::Vector2f start;
@@ -54,6 +55,11 @@ public:
 	Rect(float x, float y, float size_x, float size_y)
 		: position{ x, y }, size{ size_x, size_y }, angle{ 0 } {
 	}
+	
+	void update(float deltaTime) {
+		translate(linearVelocity * deltaTime);
+		rotate(angularVelocity * deltaTime);
+	}
 
 	IntersectionResult intersects(const Rect& other) const {
 		auto const otherPoints = other.getPoints();
@@ -87,7 +93,7 @@ public:
 	};
 
 	IntersectionResult processIntersection(const std::vector<Eigen::Vector2f>& points) const {
-		const Eigen::Rotation2Df R(pi / 2);
+
 		if (points.size() == 3) {
 			const std::array<Eigen::Vector2f, 3> edges{ points[0] - points[1], points[0] - points[2] , points[1] - points[2] };
 			const std::array<Eigen::Vector2f, 3> edgeIndexToOuterPoint{ points[2], points[1], points[0] };
@@ -96,7 +102,7 @@ public:
 			std::sort(indices.begin(), indices.end(), [&distances](const auto i1, const auto i2) {
 				return distances[i1] < distances[i2];
 			});
-			const Eigen::Vector2f normal = R * edges[indices[2]].normalized();
+			const Eigen::Vector2f normal = R_90 * edges[indices[2]].normalized();
 			const float depth = edges[indices[0]].norm();
 			const std::vector<Eigen::Vector2f> contactPoints{ edgeIndexToOuterPoint[indices[2]] };
 			return { contactPoints, normal, depth, IntersectionType::PointEdge, true };
@@ -116,7 +122,7 @@ public:
 
 		} else if (points.size() == 2) {
 			const auto direction = points[0] - points[1];
-			const Eigen::Vector2f normal = R * direction.normalized();
+			const Eigen::Vector2f normal = R_90 * direction.normalized();
 			const auto depth = 0;
 			return { points, normal, depth, IntersectionType::EdgeEdge, true };
 		} else if (points.size() == 0) {
@@ -166,29 +172,36 @@ public:
 		return position;
 	}
 
-	void rotate(float _angle) {
-		angle = _angle;
-	}
-	void addRotation(float deltaAngle) {
-		angle += deltaAngle;
-	}
-	Eigen::Vector2f getParticuleVelocity(const Eigen::Vector2f& p) {
-		if (!contains(p)) {
-			throw "where is the point my dude";
-		};
-		const Eigen::Matrix2f A{ {0, -angularVelocity}, {angularVelocity, 0} };
-		const auto vAngle = A * (p - rotationCenter);
-		return vAngle + linearVelocity;
+	void setLinearVelocity(const Eigen::Vector2f v) {
+		linearVelocity = v;
 	}
 
-private:
+	void setAngularVelocity(const float w) {
+		angularVelocity = w;
+	}
+
+	void rotate(const float deltaAngle) {
+		angle += deltaAngle;
+	}
+	void addLinearVelocity(const Eigen::Vector2f v) {
+		linearVelocity = linearVelocity + v;
+	}
+
+	Eigen::Vector2f getParticuleVelocity(const Eigen::Vector2f& p) {
+		if (!contains(p)) {
+			std::cout << "hm" << std::endl;
+		};
+		Eigen::Matrix2f A{ {0, - angularVelocity}, {angularVelocity, 0} };
+		const auto vAngle = A * (p - position);
+		return vAngle + linearVelocity;
+	}
 	float mass{ 1 };
+private:
 	Eigen::Vector2f position;
 	Eigen::Vector2f size;
-	Eigen::Vector2f linearVelocity;
-	Eigen::Vector2f rotationCenter;
-	float angle;
-	float angularVelocity;
+	Eigen::Vector2f linearVelocity{ 0, 0 };
+	float angle{ 0 };
+	float angularVelocity{ 0 };
 };
 
 
@@ -197,18 +210,62 @@ class CollisionResolver {
 public:
 	void resolveInterPenetration(Rect& r1, Rect& r2, const Rect::IntersectionResult& result) {
 		if (result.intersects && result.depth > 0) {
-			const auto [n1, n2] = getNormal(r1, r2, result);
-			r1.translate(n1 * result.depth);
+			const auto [n1, _] = getNormal(r1, r2, result);
+			const auto totalMass = r1.mass + r2.mass;
+			r1.translate(n1 * result.depth * (r2.mass / totalMass));
+			r2.translate(-n1 * result.depth * (r1.mass / totalMass));
 		}
 	}
+
+	void resolveMovement(Rect& r1, Rect& r2, const Rect::IntersectionResult& result) {
+		if (!result.intersects) {
+			return;
+		}
+		const auto [n, _] = getNormal(r1, r2, result);
+		const Eigen::Vector2f t = R_90 * n;
+		const auto& contactPoint = result.contactPoints[0];
+		const auto v1 = r1.getParticuleVelocity(contactPoint);
+		const auto v2 = r2.getParticuleVelocity(contactPoint);
+		const float v1_n = v1.dot(n);
+		const float v1_t = v1.dot(t);
+		const float v2_n = v2.dot(n);
+		const float v2_t = v2.dot(t);
+		//const auto totalVelocity = r1.getParticuleVelocity(contactPoint) + 
+		const Eigen::Matrix2f A{ {r1.mass, r2.mass}, {1, -1} };
+		const Eigen::Vector2f b{ r1.mass * v1_n + r2.mass * v2_n, v2_n - v1_n};
+		const Eigen::Vector2f sol = A.colPivHouseholderQr().solve(b);
+
+		const Eigen::Vector2f v1f = n * sol[0] + v1_t * t;
+		const Eigen::Vector2f v2f = n * sol[1] + v2_t * t;
+		setLinearAndAngularVelocity(r1, result.contactPoints[0], v1f);
+		setLinearAndAngularVelocity(r2, result.contactPoints[0], v2f);
+	};
+	
+
 private:
 
+	void setLinearAndAngularVelocity(Rect& r, const Eigen::Vector2f contactPoint, const Eigen::Vector2f velocity) {
+		const auto d = (contactPoint - r.getPosition());
+		const auto linearVelocity = (velocity.dot(d) / d.dot(d)) * d;
+		const auto rotationalVelocityComponent = velocity - linearVelocity;
+		const auto w = (R_90 * d).normalized().dot(rotationalVelocityComponent) /100;
+		r.setAngularVelocity(w);
+		r.setLinearVelocity(linearVelocity);
+		std::cout << w << "  " << linearVelocity[0] << " " << linearVelocity[1] << std::endl;
+	}
+
 	std::tuple<Eigen::Vector2f, Eigen::Vector2f> getNormal(const Rect& rect1, const Rect& rect2, const Rect::IntersectionResult& result) {
-		const auto normal = result.normal;
+		const auto normal = result.normal.normalized();
 		if ((rect1.getPosition() - result.contactPoints[0]).dot(normal) > 0) {
 			return { normal, -normal };
 		};
 		return { -normal, normal };
 	}
 
+};
+
+void update(std::vector<Rect*> rects, const float dt) {
+	for (const auto r : rects) {
+		r->update(dt);
+	}
 };

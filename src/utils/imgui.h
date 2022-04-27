@@ -24,14 +24,16 @@ public:
 		height = _height;
 	}
 
-	void drawRectangle(std::array<Eigen::Vector2f, 4> pts, const ImColor& color = { 1.f, 1.f, 1.f }, bool filled=false) {
+	void drawRectangle(std::array<Eigen::Vector2f, 4> pts, const ImColor& color = { 1.f, 1.f, 1.f }) {
 		ImDrawList* draw_list = ImGui::GetWindowDrawList();
 		toCanvasCoordinate(pts);
-		if (filled) {
-			draw_list->AddConvexPolyFilled((ImVec2*)pts.data(), 4, color);
-		} else {
-			draw_list->AddPolyline((ImVec2*)pts.data(), 4, color, 1, 1);
-		}
+		draw_list->AddPolyline((ImVec2*)pts.data(), 4, color, 1, 1);
+	}
+
+	void drawFilledRectangle(std::array<Eigen::Vector2f, 4> pts, const ImColor& color = { 1.f, 1.f, 1.f }) {
+		ImDrawList* draw_list = ImGui::GetWindowDrawList();
+		toCanvasCoordinate(pts);
+		draw_list->AddConvexPolyFilled((ImVec2*)pts.data(), 4, color);
 	}
 
 	void drawLine(std::array<Eigen::Vector2f, 2> pts, const ImColor& color = { 1.f, 1.f, 1.f }, float thickness=1) {
